@@ -4,8 +4,9 @@ project:
 webiste:
   title: "Zákaznícky Dashboard"
   sidebar: 
-    - href: quarto_dashboard.qmd
-      text: Dashboard
+    contents:
+      - href: quarto_dashboard.qmd
+        text: Dashboard
       
 format:
   html: 

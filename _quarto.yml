@@ -1,5 +1,14 @@
 project:
-  title: "PPE_dashboard"
+  type: website
 
-
-
+webiste:
+  title: "Zákaznícky Dashboard"
+  sidebar: 
+    - href: quarto_dashboard.qmd
+      text: Dashboard
+      
+format:
+  html: 
+    theme: [flatly, custom.scss]
+    toc: true
+    

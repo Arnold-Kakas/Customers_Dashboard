@@ -1,33 +1,52 @@
 /*-- scss:defaults --*/
 
+* {
+    font-family: 'Maven Pro' !important;
+  }
+  
+#dashboard-collapse {
+  display: none !important;
+}
+
+.navbar-brand-container {
+  display: contents !important;
+}
+  
+.navbar-title {
+    font-size: xx-large !important;
+}
+
+#quarto-dashboard-header > nav > div {
+  display: flex !important;
+  flex-flow: row-reverse !important;
+}
+
 .quarto-dashboard .bslib-value-box .value-box-value {
     /* Adjust font size to smaller range */
     font-size: clamp(0.8em, 2vw, 1.5em) !important;
 }
-
-
 // colors
-.quarto-dashboard .card.valuebox .card-body, 
-.quarto-dashboard .card.bslib-value-box .card-body {
-    color: white !important;
-}
 
-$navbar-bg: #2D2E87;
-$navbar-fg: white;
+$navbar-bg: #29d8d8;
+
+.card-header {
+  background-color: #29d8d8 !important;
+}
 
 .bslib-card {
   font-size: clamp(0.6em, 1.8vw, 1.3em) !important;
 }
 
 .value-box-grid .html-fill-item {
-  color: white !important;
-  background-color: #2D2E87 !important;
+  background-color: #29d8d8 !important;
   font-size: clamp(0.6em, 1.8vw, 1.3em) !important;
 }
 
 #tab-section {
-  background-color: #2D2E87 !important;
+  background-color: #29d8d8 !important;
 }
+
+
 
 /* Sidebar fixed position and overlap */
 #bslib-sidebar-1 {
@@ -35,6 +54,8 @@ $navbar-fg: white;
     top: 0; /* Align it to the top of the viewport */
     height: 100%; /* Full height */
     transition: transform 0.3s ease; /* Smooth animation for toggle */
+    background-color: white !important;
+    border-style: none !important;
 }
 
 /* When collapsed, hide the sidebar */

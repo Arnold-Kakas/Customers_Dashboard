@@ -1,0 +1,20 @@
+/*-- scss:defaults --*/
+
+.quarto-dashboard .bslib-value-box .value-box-value {
+    /* Adjust font size to smaller range */
+    font-size: clamp(0.8em, 2vw, 1.5em) !important;
+}
+
+
+// colors
+.quarto-dashboard .card.valuebox .card-body, 
+.quarto-dashboard .card.bslib-value-box .card-body {
+    color: white !important;
+}
+
+$navbar-bg: #2D2E87;
+$navbar-fg: white;
+
+.bslib-card {
+  font-size: clamp(0.6em, 1.8vw, 1.3em) !important;
+}

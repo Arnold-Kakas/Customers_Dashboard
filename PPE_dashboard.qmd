@@ -1,0 +1,382 @@
+---
+title: "PPE Dashboard"
+format: dashboard
+theme: 
+  - flatly
+  - custom.scss
+logo: data/static/logo.png
+---
+
+```{r}
+#| label: load-packages
+#| echo: false
+#| eval: true
+#| warning: false
+#| output: false
+
+# Load necessary libraries
+library(leaflet)
+library(crosstalk)
+library(DT)
+library(dplyr)
+library(stringr)
+library(sf)
+library(lubridate)
+library(scales)
+library(htmlwidgets)
+library(htmltools)
+library(janitor)
+library(purrr)
+library(summarywidget)
+library(bslib)
+library(bsicons)
+```
+
+```{r}
+#| label: prep-data
+#| echo: false
+#| eval: true
+#| warning: false
+#| output: false
+
+twelve_months_ago <- today() %m-% months(12)
+
+# Load Czech districts shapefile
+czech_districts <- read_sf("data/districts/lau1-current-iz-shp.shp") |> 
+  filter(str_detect(tolower(LAU), "cz")) |> 
+  clean_names() |> 
+  mutate(long = unlist(map(st_centroid(geometry),1)),
+         lat = unlist(map(st_centroid(geometry),2)))
+
+# Assign specialists to districts
+specialists <- c("Alice", "Bob", "Charlie")
+set.seed(123)
+czech_districts$specialist <- sample(specialists, nrow(czech_districts), replace = TRUE)
+czech_districts <- czech_districts |> 
+  mutate(label = paste0("District: ", czech_districts$name, "; ", "Specialist: ", czech_districts$specialist))
+
+# Color palettes
+pal_specialist <- colorFactor("Set1", czech_districts$specialist)
+
+# Create dummy customers
+customer_list <- list()
+
+for (spec in specialists) {
+  districts_spec <- czech_districts |> filter(specialist == spec)
+  
+  # For each district assigned to the specialist
+  for(i in seq_len(nrow(districts_spec))) {
+    district <- districts_spec[i,]
+    district_code <- district$lau
+    
+    # Generate a set number of customers per district, say 2 customers per district
+    num_customers <- 1
+    points <- st_sample(district$geometry, num_customers)
+    
+    # Convert to data frame
+    coords <- st_coordinates(st_centroid(points))
+    
+    # Create customer types
+    customer_types <- c("internal", "external", "prospect")
+    
+    # Randomly assign customer types
+    cust_types <- sample(customer_types, num_customers, replace = TRUE)
+    
+    # Generate first order dates within last 24 months
+    first_order_dates <- sample(seq(as.Date("2022-10-01"), as.Date("2024-10-01"), by="day"), num_customers, replace=TRUE)
+    
+    # Generate sales amounts
+    sales_amounts <- runif(num_customers, min = 1000, max = 10000)
+    
+    customers_spec <- data.frame(
+      customer_id = paste0(spec, "_", district_code, "_", 1:num_customers),
+      specialist = spec,
+      district = district_code,
+      customer_type = cust_types,
+      first_order_date = first_order_dates,
+      sales_amount = sales_amounts,
+      lat = coords[,2],
+      lng = coords[,1],
+      stringsAsFactors = FALSE
+    )
+    
+    customer_list[[paste0(spec, "_", district_code)]] <- customers_spec
+  }
+}
+
+customers <- do.call(rbind, customer_list) |> 
+  mutate(first_order_date = as.Date(first_order_date))
+
+# Convert date to character for JSON serialization in JavaScript
+customers$label <- paste0("Customer ID: ", customers$customer_id, "; ", "Type: ", customers$customer_type)
+customers$marker_color <- ifelse(customers$customer_type == "internal",
+                                 "#D3AF37",
+                                 ifelse(customers$customer_type == "external",
+                                        "#3D729E",
+                                        "#C4A484"))
+  
+
+```
+
+```{r}
+#| label: shared-data
+#| echo: false
+#| eval: true
+#| warning: false
+#| output: false
+
+# Create SharedData object
+sd_customers <- SharedData$new(customers, key = ~customer_id)
+```
+
+```{r}
+sd_summary <- function(data,
+         statistic=c("count", "sum"), column = NULL,
+         selection=NULL) {
+
+  
+    key <- data$key()
+    #group <- data$groupName()
+    data <- data$data(withSelection = TRUE, withFilter = TRUE,)
+  
+
+  statistic <- match.arg(statistic)
+
+  # If selection is given, apply it
+  if (!is.null(selection)) {
+    # Evaluate any formula
+    if (inherits(selection, 'formula')) {
+      if (length(selection) != 2L)
+        stop("Unexpected two-sided formula: ", deparse(selection))
+      selection = eval(selection[[2]], data, environment(selection))
+    }
+
+    if (!is.logical(selection))
+      stop("Selection must contain TRUE/FALSE values.")
+    data = data[selection,]
+    key = key[selection]
+  }
+  
+  # We just need one column, either the row.names or the specified column.
+  if (is.null(column)) {
+    stop("Column must be provided.")
+  } else {
+    if (!(column %in% colnames(data)))
+      stop("No ", column, " column in data.")
+    data = data[[column]]
+  }
+  
+  result <- if (statistic == 'count') {
+    result = n_distinct(data)
+  } else {
+    result = sum(data)
+  }
+  
+  return(result)
+}
+```
+
+```{r}
+#| label: conversion-calculation
+#| echo: false
+#| eval: true
+#| warning: false
+#| output: false
+
+calculate_conversion_rate <- function(data) {
+  # Total number of unique customers
+  total_customers <- sd_summary(data, "count", "customer_id")
+
+  # Number of internal customers
+  internal_customers <- sd_summary(data, "count", "customer_id", selection = ~customer_type == "internal")
+  
+  # Number of external customers
+  external_customers <- sd_summary(data, "count", "customer_id", selection = ~customer_type == "external")
+
+  # Calculate conversion rate
+  conversion_rate <- (internal_customers + external_customers) / total_customers
+
+  return(conversion_rate)
+}
+```
+
+```{r}
+#| label: new-customers-calculation
+#| echo: false
+#| eval: true
+#| warning: false
+#| output: false
+
+
+count_recent_customers <- function(data) {
+  
+  # Calculate the date 12 months ago from today
+  twelve_months_ago <- lubridate::today() %m-% months(12)
+  
+  # Filter customers whose first_order_date is within the last 12 months
+  recent_customers <- sd_summary(sd_customers, "count", "customer_id", selection = ~first_order_date >= twelve_months_ago)
+  
+  return(recent_customers)
+}
+```
+
+```{r}
+#| label: sales-calculation
+#| echo: false
+#| eval: true
+#| warning: false
+#| output: false
+
+
+sales_calculation <- function(data) {
+  
+  # Calculate Sales amount
+  sales_value <- sd_summary(sd_customers, "sum", "sales_amount")
+  
+  return(sales_value)
+}
+```
+
+# PPE Dashboard
+
+## Filters {.sidebar}
+
+```{r}
+filter_checkbox("specialist_filter", "Specialist", sd_customers, ~specialist, columns = 2)
+```
+
+```{r}
+filter_checkbox("customer_type_filter", "Customer Type", sd_customers, ~customer_type)
+```
+
+## Body column
+
+### KPI row {height="15%"}
+
+```{r}
+bslib::value_box(
+  title = "Conversion Rate",
+  value = summarywidget(
+  sd_customers,
+  statistic = "count",
+  column = "customer_type",
+  big_mark = " "
+),
+  showcase = bsicons::bs_icon("cash")
+)
+
+
+```
+
+
+```{r}
+#| content: valuebox
+#| title: "Conversion Rate"
+
+list(
+  icon = "check2-square",
+  color = "#2D2E87",
+  value = number(round(calculate_conversion_rate(sd_customers) * 100, 4), accuracy = 0.01, suffix = "%")
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "New in Last 12 Months"
+
+list(
+  icon = "person-plus-fill",
+  color = "#2D2E87",
+  value = number(round(count_recent_customers(sd_customers), 0), big.mark = " ")
+)
+
+```
+
+```{r}
+#| content: valuebox
+#| title: "Total Sales Amount"
+
+list(
+  icon = "cash",
+  color = "#2D2E87",
+  value = number(round(sales_calculation(sd_customers),0), big.mark = " ", suffix = " €")
+)
+```
+
+### Body row {height="85%"}
+
+#### Map {width="50%"}
+
+```{r}
+#| title: Footprint
+# Leaflet map with crosstalk
+
+leaflet(sd_customers) |>
+  addTiles() |> 
+  #addProviderTiles("Stadia.AlidadeSmooth") |> 
+  addPolygons(
+    data = czech_districts,
+    fillColor = ~pal_specialist(specialist),
+    color = "black",
+    weight = 0.5,
+    opacity = 0.1,
+    fillOpacity = 0.4,
+    label = ~label
+  ) |> 
+  addCircles(
+    data = sd_customers,
+    lng = ~lng,
+    lat = ~lat,
+    color = ~marker_color,
+    label = ~label,
+    opacity = 1,
+    radius = 20,
+    weight = 10
+    #group = "customers"
+  ) |> 
+  addLegend(
+    "bottomright",
+    colors = c("#D3AF37", "#3D729E", "#C4A484"),
+    labels = c("internal", "external", "prospect"),
+    title = "Customer Type",
+    opacity = 1
+  ) |> 
+  setView(lng = mean(czech_districts$long), lat = mean(czech_districts$lat), zoom = 7)
+```
+
+
+#### Table {width="50%"}
+```{r}
+#| title: Customers table
+#| expandable: false
+
+datatable(
+  sd_customers,
+  extensions = c('Buttons', 'FixedColumns'), 
+  rownames = FALSE,
+  filter = 'top',
+  options = list(
+    initComplete = JS(
+    "function(settings, json) {",
+        "$('body').css({'font-size': '14px', 'font-family': 'Arial'});",
+        "}"),
+    columnDefs = list(list(visible = FALSE, 
+       targets=c(6:9))),
+    dom = 'Blrtip',
+    #scrollY = 400,
+    deferRender = TRUE,
+    scroller = TRUE,
+    scrollX = TRUE,
+    scrollCollapse = TRUE,
+    buttons = c('copy', 'excel', 'csv'),
+    autoWidth = TRUE),
+  colnames = c('Customer', 'Specialist', 'District', 'Type', 'First Order', 'Sales Amount'),
+  ) |> 
+  formatCurrency(columns = 6,
+                 digits = 0,
+                 interval = 3,
+                 mark = " ",
+                 currency = " €",
+                 before = FALSE) |> 
+  formatStyle(columns = c(1:6), fontSize = '12px')
+```

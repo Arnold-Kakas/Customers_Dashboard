@@ -922,16 +922,16 @@
       "RemoteType": "github",
       "RemoteHost": "api.github.com",
       "RemoteRepo": "summarywidget",
-      "RemoteUsername": "kent37",
+      "RemoteUsername": "Arnold-Kakas",
       "RemoteRef": "HEAD",
-      "RemoteSha": "c0da3f7592c3659f7c87af02e4a10d45c2f07a4a",
+      "RemoteSha": "cc5b172e5d4e855e35b5c2dac86b492f8565c9d2",
       "Requirements": [
         "R",
         "crosstalk",
         "htmltools",
         "htmlwidgets"
       ],
-      "Hash": "44c9592cf04da5fb274c4bd8082ce7ff"
+      "Hash": "4451f2474fc58655a48af4b399ee0e68"
     },
     "terra": {
       "Package": "terra",

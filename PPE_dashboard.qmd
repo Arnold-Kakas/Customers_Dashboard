@@ -1,6 +1,10 @@
 ---
 title: "PPE Dashboard"
-format: dashboard
+format: 
+  dashboard:
+    include-in-header:
+      text: |
+          <link rel="icon" type="image/x-icon" href="data/static/favicon.ico">
 theme: 
   - flatly
   - custom.scss
@@ -237,7 +241,7 @@ sales_calculation <- function(data) {
 }
 ```
 
-# PPE Dashboard
+#
 
 ## Filters {.sidebar}
 
@@ -254,55 +258,48 @@ filter_checkbox("customer_type_filter", "Customer Type", sd_customers, ~customer
 ### KPI row {height="15%"}
 
 ```{r}
-bslib::value_box(
-  title = "Conversion Rate",
-  value = summarywidget(
-  sd_customers,
-  statistic = "count",
-  column = "customer_type",
-  big_mark = " "
-),
-  showcase = bsicons::bs_icon("cash")
-)
-
-
-```
-
-
-```{r}
 #| content: valuebox
 #| title: "Conversion Rate"
+#| icon: check2-square
+#| color: "#2D2E87"
+#| expandable: false
 
-list(
-  icon = "check2-square",
-  color = "#2D2E87",
-  value = number(round(calculate_conversion_rate(sd_customers) * 100, 4), accuracy = 0.01, suffix = "%")
+htmltools::browsable(summarywidget(
+      sd_customers,
+      statistic = "count_rate",
+      numerator_selection = ~ customer_type %in% c("internal", "external"),
+      digits = 1)
 )
 ```
 
 ```{r}
 #| content: valuebox
 #| title: "New in Last 12 Months"
+#| icon: person-plus-fill
+#| color: "#2D2E87"
+#| expandable: false
 
-list(
-  icon = "person-plus-fill",
-  color = "#2D2E87",
-  value = number(round(count_recent_customers(sd_customers), 0), big.mark = " ")
+htmltools::browsable(summarywidget(
+  sd_customers,
+  statistic = "distinct_count",
+  selection = ~ first_order_date >= twelve_months_ago)
 )
-
 ```
 
 ```{r}
 #| content: valuebox
 #| title: "Total Sales Amount"
+#| icon: cash
+#| color: "#2D2E87"
+#| expandable: false
 
-list(
-  icon = "cash",
-  color = "#2D2E87",
-  value = number(round(sales_calculation(sd_customers),0), big.mark = " ", suffix = " €")
+htmltools::browsable(summarywidget(
+  sd_customers,
+  statistic = "sum",
+  column = "sales_amount",
+  suffix = " €")
 )
 ```
-
 ### Body row {height="85%"}
 
 #### Map {width="50%"}
@@ -323,6 +320,14 @@ leaflet(sd_customers) |>
     fillOpacity = 0.4,
     label = ~label
   ) |> 
+  addLegend(
+    "bottomright",
+    colors = c("#D3AF37", "#3D729E", "#C4A484"),
+    labels = c("internal", "external", "prospect"),
+    title = "Customer Type",
+    opacity = 1
+  ) |> 
+  setView(lng = mean(czech_districts$long), lat = mean(czech_districts$lat), zoom = 7) |> 
   addCircles(
     data = sd_customers,
     lng = ~lng,
@@ -333,15 +338,7 @@ leaflet(sd_customers) |>
     radius = 20,
     weight = 10
     #group = "customers"
-  ) |> 
-  addLegend(
-    "bottomright",
-    colors = c("#D3AF37", "#3D729E", "#C4A484"),
-    labels = c("internal", "external", "prospect"),
-    title = "Customer Type",
-    opacity = 1
-  ) |> 
-  setView(lng = mean(czech_districts$long), lat = mean(czech_districts$lat), zoom = 7)
+  )
 ```
 
 
@@ -358,18 +355,17 @@ datatable(
   options = list(
     initComplete = JS(
     "function(settings, json) {",
-        "$('body').css({'font-size': '14px', 'font-family': 'Arial'});",
+        "$('body').css({'font-size': '12px', 'font-family': 'Arial'});",
         "}"),
     columnDefs = list(list(visible = FALSE, 
        targets=c(6:9))),
     dom = 'Blrtip',
     #scrollY = 400,
     deferRender = TRUE,
-    scroller = TRUE,
-    scrollX = TRUE,
-    scrollCollapse = TRUE,
+    #scroller = TRUE,
+    #scrollCollapse = TRUE,
     buttons = c('copy', 'excel', 'csv'),
-    autoWidth = TRUE),
+    autoWidth = FALSE),
   colnames = c('Customer', 'Specialist', 'District', 'Type', 'First Order', 'Sales Amount'),
   ) |> 
   formatCurrency(columns = 6,
@@ -379,4 +375,6 @@ datatable(
                  currency = " €",
                  before = FALSE) |> 
   formatStyle(columns = c(1:6), fontSize = '12px')
+
+#https://stackoverflow.com/questions/39775563/why-is-the-vertical-scroll-here-not-working
 ```
